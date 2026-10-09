@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grand Sea Adventure</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#071b2b;color:#fff;font-family:system-ui,Arial,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh}
+#wrap{width:min(100vw,1100px);padding:12px}#top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap}
+h1{font-size:clamp(20px,3vw,30px);margin:0;color:#ffd35b;text-shadow:2px 2px #713b15}.stat{background:#102d40;border:1px solid #39708b;border-radius:10px;padding:8px 12px;font-weight:700}
+#gamebox{position:relative;border:3px solid #39708b;border-radius:14px;overflow:hidden;box-shadow:0 12px 45px #0009}
+canvas{display:block;width:100%;height:auto;background:#55c9ed;image-rendering:pixelated}
+#overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#031624bb;padding:18px}
+.panel{max-width:520px;background:#0d2c40f2;border:2px solid #ffd35b;border-radius:16px;padding:22px;text-align:center;box-shadow:0 10px 35px #0008}
+.panel h2{color:#ffd35b;margin:0 0 8px;font-size:30px}.panel p{line-height:1.5}.btn{border:0;border-radius:10px;background:#20b66b;color:#fff;font-size:19px;font-weight:800;padding:12px 26px;cursor:pointer;box-shadow:0 4px #087b44}.btn:hover{filter:brightness(1.1)}
+#bottom{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;margin-top:8px}.hint{color:#bce6f5;font-size:13px}.mobile{display:none;gap:6px}.mobile button{padding:10px 13px;background:#16435b;color:white;border:1px solid #4e8ca8;border-radius:8px;font-weight:bold}
+@media(max-width:650px){.mobile{display:flex}#top{gap:5px}.stat{font-size:12px;padding:6px}}
+</style></head>
+<body><div id="wrap">
+<div id="top"><h1>🏴‍☠️ GRAND SEA ADVENTURE</h1><div class="stat" id="hp">❤️ Health: 100</div><div class="stat" id="coins">🪙 Berries: 0</div><div class="stat" id="quest">📜 Quest: Find the sailor</div></div>
+<div id="gamebox"><canvas id="game" width="960" height="600"></canvas>
+<div id="overlay"><div class="panel"><h2>Set Sail, Rookie Pirate!</h2><p>Explore a sunny island, meet the sailor, collect treasure, and fend off the navy. Your adventure starts here.</p><p><b>WASD / Arrow keys</b> move · <b>Space</b> attack · <b>E</b> interact · <b>Shift</b> dash</p><button class="btn" id="start">PLAY GAME ▶</button></div></div></div>
+<div id="bottom"><div class="hint">WASD/Arrows: move · Space: attack · E: talk/collect · Shift: dash · Explore the island!</div><div class="mobile"><button data-k="ArrowUp">▲</button><button data-k="ArrowLeft">◀</button><button data-k="ArrowDown">▼</button><button data-k="ArrowRight">▶</button><button id="mattack">⚔ Attack</button><button id="minteract">E Talk</button></div></div>
+</div>
+<script>
+const c=document.getElementById('game'),ctx=c.getContext('2d');const W=c.width,H=c.height;
+const keys={};let running=false,dialog="",dialogTimer=0,frame=0,quest=0;
+const player={x:470,y:390,hp:100,berries:0,dir:0,atk:0,dash:0};
+const sailor={x:650,y:300,talked:false};
+const treasure=[{x:260,y:250,got:false},{x:780,y:420,got:false},{x:350,y:475,got:false},{x:700,y:220,got:false}];
+const enemies=[{x:730,y:340,hp:3,alive:true,cd:0},{x:300,y:360,hp:3,alive:true,cd:40},{x:825,y:300,hp:3,alive:true,cd:80}];
+const trees=[ [100,150],[170,310],[820,160],[870,460],[120,470],[560,180],[570,480],[390,150],[220,530],[900,230] ];
+function ellipse(x,y,rx,ry,color){ctx.fillStyle=color;ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.fill()}
+function text(t,x,y,size=16,color='#fff'){ctx.font=`bold ${size}px system-ui`;ctx.lineWidth=3;ctx.strokeStyle='#123';ctx.strokeText(t,x,y);ctx.fillStyle=color;ctx.fillText(t,x,y)}
+function draw(){
+ // sea
+ let g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#32b9e6');g.addColorStop(1,'#147da9');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ for(let i=0;i<55;i++){let x=(i*173+frame*.35)%W,y=(i*97)%H;ctx.strokeStyle='#b9f5ff77';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x+9,y-4,x+18,y);ctx.stroke()}
+ // island sand/grass
+ ctx.fillStyle='#d8bd78';ctx.beginPath();ctx.ellipse(480,320,410,260,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#64b85c';ctx.beginPath();ctx.ellipse(480,305,380,235,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#86ce69';ctx.beginPath();ctx.ellipse(470,295,320,180,0,0,Math.PI*2);ctx.fill();
+ // paths
+ ctx.strokeStyle='#d7b778';ctx.lineWidth=64;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(440,500);ctx.quadraticCurveTo(510,400,480,330);ctx.quadraticCurveTo(560,260,650,300);ctx.stroke();
+ // village huts
+ for(const [x,y,col] of [[390,245,'#e8f3ed'],[450,220,'#fff0c4'],[520,245,'#d9edff']]){
+ ctx.fillStyle='#9b633d';ctx.fillRect(x-26,y-8,52,36);ctx.fillStyle=col;ctx.fillRect(x-23,y-5,46,31);
+ ctx.fillStyle='#c54d3e';ctx.beginPath();ctx.moveTo(x-34,y-6);ctx.lineTo(x,y-31);ctx.lineTo(x+34,y-6);ctx.closePath();ctx.fill();
+ ctx.fillStyle='#69452c';ctx.fillRect(x-7,y+10,14,21);ctx.fillStyle='#8ed7f0';ctx.fillRect(x+10,y+2,8,9)}
+ // dock and ship
+ ctx.fillStyle='#8e5c32';ctx.fillRect(30,510,245,60);for(let x=35;x<275;x+=30){ctx.strokeStyle='#dba76c';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,510);ctx.lineTo(x,570);ctx.stroke()}
+ ctx.fillStyle='#5e3925';ctx.beginPath();ctx.moveTo(55,490);ctx.lineTo(235,490);ctx.lineTo(210,520);ctx.lineTo(85,520);ctx.closePath();ctx.fill();
+ ctx.fillStyle='#fff4d4';ctx.beginPath();ctx.moveTo(115,420);ctx.lineTo(115,485);ctx.lineTo(205,485);ctx.closePath();ctx.fill();ctx.strokeStyle='#68452b';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(115,405);ctx.lineTo(115,490);ctx.stroke();text('☠',142,463,23,'#333');
+ // trees
+ for(const [x,y] of trees){ctx.fillStyle='#80512f';ctx.fillRect(x-5,y+8,10,25);ellipse(x,y,22,23,'#247e47');ellipse(x-10,y-8,15,16,'#3b9c50');ellipse(x+10,y-7,14,15,'#4eb75b')}
+ // sailor
+ ellipse(sailor.x,sailor.y+17,15,6,'#27683e');ctx.fillStyle='#f0c49a';ctx.beginPath();ctx.arc(sailor.x,sailor.y,10,0,Math.PI*2);ctx.fill();ctx.fillStyle='#e9e8dc';ctx.fillRect(sailor.x-10,sailor.y+10,20,20);ctx.fillStyle='#315d8c';ctx.fillRect(sailor.x-11,sailor.y+28,9,12);ctx.fillRect(sailor.x+2,sailor.y+28,9,12);ellipse(sailor.x,sailor.y-8,12,5,'#f3d354');text('SAILOR',sailor.x-30,sailor.y-24,12,'#fff');
+ // treasure
+ for(const t of treasure)if(!t.got){ctx.fillStyle='#80502d';ctx.fillRect(t.x-11,t.y-10,22,17);ctx.fillStyle='#f4c342';ctx.fillRect(t.x-11,t.y-13,22,6);ctx.fillRect(t.x-2,t.y-12,4,18);text('✦',t.x-5,t.y-16,14,'#fff27b')}
+ // enemies
+ for(const e of enemies)if(e.alive){ellipse(e.x,e.y+18,15,6,'#255c3e');ctx.fillStyle='#edc49d';ctx.beginPath();ctx.arc(e.x,e.y,10,0,7);ctx.fill();ctx.fillStyle='#e8e7dc';ctx.fillRect(e.x-10,e.y+10,20,21);ctx.fillStyle='#263b7a';ctx.fillRect(e.x-10,e.y+28,8,12);ctx.fillRect(e.x+2,e.y+28,8,12);ctx.fillStyle='#243b82';ctx.fillRect(e.x-12,e.y+7,24,7);text('⚔',e.x-7,e.y-14,13,'#ffe08b');}
+ // player shadow and avatar
+ ellipse(player.x,player.y+18,18,8,'#174c34aa');
+ // attack arc
+ if(player.atk>0){ctx.strokeStyle='#fff4a6';ctx.lineWidth=8;ctx.beginPath();ctx.arc(player.x+Math.cos(player.dir)*17,player.y+Math.sin(player.dir)*10,27,player.dir-1,player.dir+1);ctx.stroke()}
+ // hat, body, face
+ ctx.fillStyle='#de4736';ctx.beginPath();ctx.ellipse(player.x,player.y+7,12,15,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#f1c39a';ctx.beginPath();ctx.arc(player.x,player.y-7,10,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#f4c844';ctx.beginPath();ctx.ellipse(player.x,player.y-15,18,6,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#b9372a';ctx.fillRect(player.x-9,player.y-17,18,3);
+ ctx.fillStyle='#273d61';ctx.fillRect(player.x-9,player.y+17,7,9);ctx.fillRect(player.x+2,player.y+17,7,9);
+ // interaction marker
+ if(Math.hypot(player.x-sailor.x,player.y-sailor.y)<55)text('E: TALK',sailor.x-27,sailor.y-42,14,'#ffe875');
+ if(dialogTimer>0){ctx.fillStyle='#092638eF';ctx.fillRect(220,18,520,54);ctx.strokeStyle='#f6d45d';ctx.strokeRect(220,18,520,54);text(dialog,240,51,17,'#fff')}
+ // edge vignette and map hint
+ ctx.fillStyle='#082337bb';ctx.fillRect(12,12,170,60);text('ISLAND: LOGUETOWN',22,35,13,'#ffdf70');text('Find treasure + talk',22,55,12);
+}
+function update(){
+ if(!running)return;frame++;
+ let dx=0,dy=0; if(keys.w||keys.ArrowUp)dy--;if(keys.s||keys.ArrowDown)dy++;if(keys.a||keys.ArrowLeft)dx--;if(keys.d||keys.ArrowRight)dx++;
+ if(dx||dy){let l=Math.hypot(dx,dy);dx/=l;dy/=l;player.dir=Math.atan2(dy,dx);let speed=keys.Shift?5.3:2.7;if(keys.Shift)player.dash=8;player.x+=dx*speed;player.y+=dy*speed}
+ player.x=Math.max(65,Math.min(W-65,player.x));player.y=Math.max(90,Math.min(H-45,player.y));
+ if(player.atk>0)player.atk--;
+ for(const e of enemies)if(e.alive){let d=Math.hypot(player.x-e.x,player.y-e.y);if(d<145){e.x+=(player.x-e.x)/Math.max(d,1)*.45;e.y+=(player.y-e.y)/Math.max(d,1)*.45}if(d<29&&frame%55===0){player.hp=Math.max(0,player.hp-7);showDialog('The navy hit you! Keep moving.');}}
+ if(player.hp<=0){showDialog('You were knocked out! Press R to try again.');running=false}
+ document.getElementById('hp').textContent='❤️ Health: '+player.hp;
+ document.getElementById('coins').textContent='🪙 Berries: '+player.berries;
+ document.getElementById('quest').textContent='📜 Quest: '+(quest===0?'Find the sailor':quest===1?'Collect 3 treasures':quest===2?'Defeat the navy':'Island cleared!');
+ draw();requestAnimationFrame(update);
+}
+function showDialog(s){dialog=s;dialogTimer=150}
+function interact(){if(!running)return;
+ if(Math.hypot(player.x-sailor.x,player.y-sailor.y)<58){if(!sailor.talked){sailor.talked=true;quest=1;showDialog('Sailor: Welcome, pirate! Find 3 treasure chests!')}else showDialog('Sailor: Treasure is scattered around the island!');return}
+ let t=treasure.find(t=>!t.got&&Math.hypot(player.x-t.x,player.y-t.y)<38);if(t){t.got=true;player.berries+=25;let count=treasure.filter(t=>t.got).length;if(count>=3)quest=2;showDialog('Treasure found! +25 berries');return}
+ showDialog('Nothing nearby. Explore the island!')}
+function attack(){if(!running)return;player.atk=12;let hit=false;for(const e of enemies){if(e.alive&&Math.hypot(player.x-e.x,player.y-e.y)<72){e.hp--;hit=true;if(e.hp<=0){e.alive=false;player.berries+=50;if(enemies.every(e=>!e.alive)){quest=3;showDialog('Island cleared! You defeated the navy!')}else showDialog('Navy defeated! +50 berries')}}}if(!hit)showDialog('Swing! Get closer to a navy guard.')}
+document.getElementById('start').onclick=()=>{document.getElementById('overlay').style.display='none';running=true;update()};
+window.addEventListener('keydown',e=>{let k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=true;if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();if(e.key===' ' )attack();if(k==='e')interact();if(k==='r'&&player.hp<=0){player.hp=100;player.x=470;player.y=390;enemies.forEach(e=>{e.hp=3;e.alive=true});running=true;update()}});
+window.addEventListener('keyup',e=>{let k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=false});
+document.querySelectorAll('[data-k]').forEach(b=>{b.addEventListener('pointerdown',e=>{keys[b.dataset.k]=true});b.addEventListener('pointerup',()=>keys[b.dataset.k]=false);b.addEventListener('pointerleave',()=>keys[b.dataset.k]=false)});
+document.getElementById('mattack').onclick=attack;document.getElementById('minteract').onclick=interact;
+setInterval(()=>{if(dialogTimer>0)dialogTimer--},30);draw();
+</script></body></html>
